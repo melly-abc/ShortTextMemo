@@ -1,0 +1,99 @@
+#include "sqlele.hsp"
+#include "m_string.hsp"
+
+
+
+	SX=500:SY=707 ;画面サイズ
+	MARGINE=10 ;縁の空白サイズ
+	MB_SIZEX=400:MB_SIZEY=50 ;入力メッセージボックスのサイズ
+	MAX_LEN=200 ;入力文字数
+
+
+;========================================================================================
+*Init
+	;データベースの設定
+	sql_open "test.db"
+	sql_q "CREATE TABLE IF NOT EXISTS MemoTable (ID INTEGER PRIMARY KEY, Date, Memo)";テーブルの作成
+
+	;画面設定
+	screen 0,SX,SY;画面を指定サイズで初期化
+	color 200,0,0:boxf 0,0,SX,SY-70;登録メモ表示領域
+	color 0,255,255:boxf 0,SY-70-MARGINE,SX,SY-50-MARGINE;文字数カウント領域
+
+	posy=MARGINE;文字列描画初期位置を設定（マージンを考慮）
+	msg="";メッセージ変数を初期化
+	pos MARGINE, SY-MARGINE-MB_SIZEY : mesbox msg, MB_SIZEX, MB_SIZEY,,MAX_LEN;入力メッセージボックスを配置
+	objsize 80,50:pos MB_SIZEX+MARGINE,SY-MARGINE-MB_SIZEY: button goto "書き込み", *Save;書き込みボタンを配置
+	goto*Draw;画面出力
+	stop
+
+
+*Str_Check
+i=0 ;文字数カウンタ
+;全部英字ならUnicode変換で2倍で最大。
+sdim buf,strlen(msg)*2+2
+
+cnvstow buf,msg
+repeat
+	tmp = wpeek(buf,cnt*2)
+	if tmp = 0 : break
+	i=i+1
+loop
+return 
+
+*Draw
+	
+	repeat
+		redraw 0
+			color 255,255,255:boxf 0,0,SX,SY-70-MARGINE;保存リスト領域をリセット
+			sql_q "SELECT * FROM MemoTable"; テーブル内のデータをすべて抽出
+			draw_posy=posy
+			repeat stat;全データ分繰り返す
+				font "ＭＳ ゴシック",16:color 50,50,50;フォント設定
+				pos MARGINE,draw_posy
+				buff_str=sql_v("Memo")
+				gosub *Remake_text
+				dim text_line,MAX_LEN
+				split text,"\n",text_line
+				repeat length(text_line)
+					mes text_line(cnt)
+					draw_posy+=15
+				loop
+		
+				font "ＭＳ ゴシック",10:color 170,170,170
+				pos SX-MARGINE-100,draw_posy
+				mes sql_v("Date")
+				draw_posy+=15
+				sql_next
+				line MARGINE,draw_posy,SX-MARGINE,draw_posy
+				draw_posy+=15
+			loop
+
+			gosub*Str_Check
+			color 255,255,255:boxf 0,SY-70-MARGINE,SX,SY-50-MARGINE
+			len=MAX_LEN-i
+			if len>0 : color 100,100,100 :else:color 255,0,0
+			font "ＭＳ ゴシック",16
+			pos 10,SY-80:mes len
+			title str(draw_posy)
+			stick key,2+8
+			if draw_posy>=SY-60:if key&2 :posy-=1
+			if posy<=MARGINE:if key&8:posy+=1
+		redraw 1
+		await 10
+	loop
+	stop
+
+*Save
+	; レコードを追加
+	sql_q "INSERT INTO MemoTable (Date,Memo) VALUES (datetime('now','localtime')," + prm_text(msg) + ")"
+	objprm 0,"";メッセージボックスをリセット
+	goto*Draw;画面更新
+	
+*Remake_Text
+	sdim text, MAX_LEN*5
+	AutoInsertLF buff_str,text,SX-MARGINE*2
+	return
+
+
+;========================================================================================
